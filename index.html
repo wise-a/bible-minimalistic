@@ -159,23 +159,6 @@
             opacity: 0;
             cursor: pointer;
         }
-        #font-suggestions {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid var(--modal-border);
-            border-radius: 4px;
-            background-color: var(--modal-bg);
-        }
-        #font-suggestions li {
-            padding: 8px;
-            cursor: pointer;
-        }
-        #font-suggestions li:hover {
-            background-color: var(--modal-button-hover);
-        }
     </style>
 </head>
 <body>
@@ -237,9 +220,9 @@
                 Text Color: <input type="color" id="text-color" value="#2e3436">
             </label>
             <label class="settings-option">
-                Font: <input id="font-input" placeholder="Type to search fonts...">
+                Font: <input list="font-list" id="font-input" placeholder="Type to search fonts...">
+                <datalist id="font-list"></datalist>
             </label>
-            <ul id="font-suggestions"></ul>
         </div>
     </div>
 
@@ -353,15 +336,20 @@
         const bgColorInput = document.getElementById('bg-color');
         const textColorInput = document.getElementById('text-color');
         const fontInput = document.getElementById('font-input');
-        const fontSuggestions = document.getElementById('font-suggestions');
 
         let fontList = [];
         let currentFontLink = null;
 
-        fetch('https://www.googleapis.com/webfonts/v1/webfonts')
+        fetch('https://fonts.google.com/metadata/fonts')
             .then(response => response.json())
             .then(data => {
-                fontList = data.items.map(item => item.family).sort((a, b) => a.localeCompare(b));
+                fontList = data.familyMetadataList.map(f => f.family).sort();
+                const datalist = document.getElementById('font-list');
+                fontList.forEach(font => {
+                    const option = document.createElement('option');
+                    option.value = font;
+                    datalist.appendChild(option);
+                });
             })
             .catch(error => console.error('Error fetching fonts:', error));
 
@@ -380,25 +368,8 @@
         bgColorInput.addEventListener('input', updateCustomStyles);
         textColorInput.addEventListener('input', updateCustomStyles);
 
-        fontInput.addEventListener('input', () => {
-            const query = fontInput.value.trim().toLowerCase();
-            fontSuggestions.innerHTML = '';
-            if (query) {
-                const matches = fontList.filter(font => font.toLowerCase().startsWith(query)).slice(0, 20);
-                matches.forEach(font => {
-                    const li = document.createElement('li');
-                    li.textContent = font;
-                    li.onclick = () => {
-                        fontInput.value = font;
-                        fontSuggestions.innerHTML = '';
-                        applyFont(font);
-                    };
-                    fontSuggestions.appendChild(li);
-                });
-            }
-        });
-
-        function applyFont(font) {
+        fontInput.addEventListener('change', () => {
+            const font = fontInput.value.trim();
             if (font && fontList.includes(font)) {
                 if (currentFontLink) {
                     document.head.removeChild(currentFontLink);
@@ -408,18 +379,13 @@
                 currentFontLink.rel = 'stylesheet';
                 document.head.appendChild(currentFontLink);
                 document.body.style.fontFamily = `${font}, sans-serif`;
-            } else {
+            } else if (font === '') {
                 document.body.style.fontFamily = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif`;
                 if (currentFontLink) {
                     document.head.removeChild(currentFontLink);
                     currentFontLink = null;
                 }
             }
-        }
-
-        fontInput.addEventListener('change', () => {
-            const font = fontInput.value.trim();
-            applyFont(font);
         });
 
         function shadeColor(color, percent) {
