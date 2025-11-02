@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bible Reader</title>
+    <style>
+        /* Inspired by GNOME Adwaita: clean, minimal, rounded corners, system fonts */
+        :root {
+            --bg-color: #f6f5f4;
+            --text-color: #2e3436;
+            --button-bg: #ffffff;
+            --button-text: #2e3436;
+            --button-border: #d3d7cf;
+            --button-hover: #e4e4e4;
+            --sup-color: #888;
+            --modal-bg: #fefefe;
+            --modal-text: #000000;
+            --modal-border: #888;
+            --close-color: #aaa;
+            --close-hover: #000000;
+            --book-hover: #e4e4e4;
+            --modal-button-bg: #ffffff;
+            --modal-button-text: #2e3436;
+            --modal-button-border: #d3d7cf;
+            --modal-button-hover: #e4e4e4;
+            --modal-book-hover: #e4e4e4;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        button {
+            background-color: var(--button-bg);
+            border: 1px solid var(--button-border);
+            border-radius: 8px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+            color: var(--button-text);
+        }
+        button:hover {
+            background-color: var(--button-hover);
+        }
+        #content {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .verse {
+            margin-bottom: 10px;
+        }
+        .verse sup {
+            font-size: 0.8em;
+            color: var(--sup-color);
+            margin-right: 5px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: var(--modal-bg);
+            margin: auto;
+            padding: 20px;
+            border: 1px solid var(--modal-border);
+            width: 80%;
+            max-width: 600px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            color: var(--modal-text);
+            --button-bg: var(--modal-button-bg);
+            --button-text: var(--modal-button-text);
+            --button-border: var(--modal-button-border);
+            --button-hover: var(--modal-button-hover);
+            --book-hover: var(--modal-book-hover);
+        }
+        .book-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .book-list {
+            display: flex;
+            flex-direction: column;
+        }
+        .book-button {
+            background: none;
+            border: none;
+            text-align: left;
+            padding: 5px;
+            cursor: pointer;
+            color: inherit;
+        }
+        .book-button:hover {
+            background-color: var(--book-hover);
+        }
+        .chapter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 10px;
+        }
+        .chapter-button {
+            background-color: var(--button-bg);
+            border: 1px solid var(--button-border);
+            border-radius: 8px;
+            padding: 8px;
+            cursor: pointer;
+            text-align: center;
+            color: var(--button-text);
+        }
+        .chapter-button:hover {
+            background-color: var(--button-hover);
+        }
+        .close {
+            color: var(--close-color);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: var(--close-hover);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .settings-option {
+            display: block;
+            margin-bottom: 10px;
+        }
+        #settings-btn {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 40px;
+            height: 40px;
+            background: transparent;
+            border: none;
+            opacity: 0;
+            cursor: pointer;
+        }
+        #font-suggestions {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--modal-border);
+            border-radius: 4px;
+            background-color: var(--modal-bg);
+        }
+        #font-suggestions li {
+            padding: 8px;
+            cursor: pointer;
+        }
+        #font-suggestions li:hover {
+            background-color: var(--modal-button-hover);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <button id="version-btn">Version: ESV</button>
+        <button id="book-btn">Book: Genesis</button>
+        <span id="chapter-span">Chapter: 1</span>
+        <button id="settings-btn"></button>
+    </header>
+    <div id="content">Loading...</div>
+
+    <!-- Version Modal -->
+    <div id="version-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('version-modal')">&times;</span>
+            <h2>Select Version</h2>
+            <div class="version-list">
+                <button class="version-button" data-version="ESV">ESV</button>
+                <button class="version-button" data-version="KJV">KJV</button>
+                <button class="version-button" data-version="NLT">NLT</button>
+                <button class="version-button" data-version="NKJV">NKJV</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Book Modal -->
+    <div id="book-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('book-modal')">&times;</span>
+            <h2>Select Book</h2>
+            <div class="book-grid">
+                <div class="book-list" id="ot-books"></div>
+                <div class="book-list" id="nt-books"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chapter Modal -->
+    <div id="chapter-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('chapter-modal')">&times;</span>
+            <h2>Select Chapter</h2>
+            <div class="chapter-grid" id="chapter-list"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('settings-modal')">&times;</span>
+            <h2>Customize</h2>
+            <label class="settings-option">
+                <input type="checkbox" id="dark-mode"> Dark Mode
+            </label>
+            <label class="settings-option">
+                Background Color: <input type="color" id="bg-color" value="#f6f5f4">
+            </label>
+            <label class="settings-option">
+                Text Color: <input type="color" id="text-color" value="#2e3436">
+            </label>
+            <label class="settings-option">
+                Font: <input id="font-input" placeholder="Type to search fonts...">
+            </label>
+            <ul id="font-suggestions"></ul>
+        </div>
+    </div>
+
+    <script>
+        const books = [
+            { id: 1, name: 'Genesis', chapters: 50, testament: 'OT' },
+            { id: 2, name: 'Exodus', chapters: 40, testament: 'OT' },
+            { id: 3, name: 'Leviticus', chapters: 27, testament: 'OT' },
+            { id: 4, name: 'Numbers', chapters: 36, testament: 'OT' },
+            { id: 5, name: 'Deuteronomy', chapters: 34, testament: 'OT' },
+            { id: 6, name: 'Joshua', chapters: 24, testament: 'OT' },
+            { id: 7, name: 'Judges', chapters: 21, testament: 'OT' },
+            { id: 8, name: 'Ruth', chapters: 4, testament: 'OT' },
+            { id: 9, name: '1 Samuel', chapters: 31, testament: 'OT' },
+            { id: 10, name: '2 Samuel', chapters: 24, testament: 'OT' },
+            { id: 11, name: '1 Kings', chapters: 22, testament: 'OT' },
+            { id: 12, name: '2 Kings', chapters: 25, testament: 'OT' },
+            { id: 13, name: '1 Chronicles', chapters: 29, testament: 'OT' },
+            { id: 14, name: '2 Chronicles', chapters: 36, testament: 'OT' },
+            { id: 15, name: 'Ezra', chapters: 10, testament: 'OT' },
+            { id: 16, name: 'Nehemiah', chapters: 13, testament: 'OT' },
+            { id: 17, name: 'Esther', chapters: 10, testament: 'OT' },
+            { id: 18, name: 'Job', chapters: 42, testament: 'OT' },
+            { id: 19, name: 'Psalms', chapters: 150, testament: 'OT' },
+            { id: 20, name: 'Proverbs', chapters: 31, testament: 'OT' },
+            { id: 21, name: 'Ecclesiastes', chapters: 12, testament: 'OT' },
+            { id: 22, name: 'Song of Solomon', chapters: 8, testament: 'OT' },
+            { id: 23, name: 'Isaiah', chapters: 66, testament: 'OT' },
+            { id: 24, name: 'Jeremiah', chapters: 52, testament: 'OT' },
+            { id: 25, name: 'Lamentations', chapters: 5, testament: 'OT' },
+            { id: 26, name: 'Ezekiel', chapters: 48, testament: 'OT' },
+            { id: 27, name: 'Daniel', chapters: 12, testament: 'OT' },
+            { id: 28, name: 'Hosea', chapters: 14, testament: 'OT' },
+            { id: 29, name: 'Joel', chapters: 3, testament: 'OT' },
+            { id: 30, name: 'Amos', chapters: 9, testament: 'OT' },
+            { id: 31, name: 'Obadiah', chapters: 1, testament: 'OT' },
+            { id: 32, name: 'Jonah', chapters: 4, testament: 'OT' },
+            { id: 33, name: 'Micah', chapters: 7, testament: 'OT' },
+            { id: 34, name: 'Nahum', chapters: 3, testament: 'OT' },
+            { id: 35, name: 'Habakkuk', chapters: 3, testament: 'OT' },
+            { id: 36, name: 'Zephaniah', chapters: 3, testament: 'OT' },
+            { id: 37, name: 'Haggai', chapters: 2, testament: 'OT' },
+            { id: 38, name: 'Zechariah', chapters: 14, testament: 'OT' },
+            { id: 39, name: 'Malachi', chapters: 4, testament: 'OT' },
+            { id: 40, name: 'Matthew', chapters: 28, testament: 'NT' },
+            { id: 41, name: 'Mark', chapters: 16, testament: 'NT' },
+            { id: 42, name: 'Luke', chapters: 24, testament: 'NT' },
+            { id: 43, name: 'John', chapters: 21, testament: 'NT' },
+            { id: 44, name: 'Acts', chapters: 28, testament: 'NT' },
+            { id: 45, name: 'Romans', chapters: 16, testament: 'NT' },
+            { id: 46, name: '1 Corinthians', chapters: 16, testament: 'NT' },
+            { id: 47, name: '2 Corinthians', chapters: 13, testament: 'NT' },
+            { id: 48, name: 'Galatians', chapters: 6, testament: 'NT' },
+            { id: 49, name: 'Ephesians', chapters: 6, testament: 'NT' },
+            { id: 50, name: 'Philippians', chapters: 4, testament: 'NT' },
+            { id: 51, name: 'Colossians', chapters: 4, testament: 'NT' },
+            { id: 52, name: '1 Thessalonians', chapters: 5, testament: 'NT' },
+            { id: 53, name: '2 Thessalonians', chapters: 3, testament: 'NT' },
+            { id: 54, name: '1 Timothy', chapters: 6, testament: 'NT' },
+            { id: 55, name: '2 Timothy', chapters: 4, testament: 'NT' },
+            { id: 56, name: 'Titus', chapters: 3, testament: 'NT' },
+            { id: 57, name: 'Philemon', chapters: 1, testament: 'NT' },
+            { id: 58, name: 'Hebrews', chapters: 13, testament: 'NT' },
+            { id: 59, name: 'James', chapters: 5, testament: 'NT' },
+            { id: 60, name: '1 Peter', chapters: 5, testament: 'NT' },
+            { id: 61, name: '2 Peter', chapters: 3, testament: 'NT' },
+            { id: 62, name: '1 John', chapters: 5, testament: 'NT' },
+            { id: 63, name: '2 John', chapters: 1, testament: 'NT' },
+            { id: 64, name: '3 John', chapters: 1, testament: 'NT' },
+            { id: 65, name: 'Jude', chapters: 1, testament: 'NT' },
+            { id: 66, name: 'Revelation', chapters: 22, testament: 'NT' }
+        ];
+
+        let currentVersion = 'ESV';
+        let currentBookId = 1;
+        let currentBookName = 'Genesis';
+        let currentChapter = 1;
+
+        // Populate book lists
+        const otBooks = document.getElementById('ot-books');
+        const ntBooks = document.getElementById('nt-books');
+        books.forEach(book => {
+            const btn = document.createElement('button');
+            btn.className = 'book-button';
+            btn.textContent = book.name;
+            btn.onclick = () => selectBook(book);
+            if (book.testament === 'OT') {
+                otBooks.appendChild(btn);
+            } else {
+                ntBooks.appendChild(btn);
+            }
+        });
+
+        // Event listeners
+        document.getElementById('version-btn').onclick = () => openModal('version-modal');
+        document.getElementById('book-btn').onclick = () => openModal('book-modal');
+        document.getElementById('settings-btn').onclick = () => openModal('settings-modal');
+
+        // Version buttons
+        document.querySelectorAll('.version-button').forEach(btn => {
+            btn.onclick = () => {
+                currentVersion = btn.dataset.version;
+                document.getElementById('version-btn').textContent = `Version: ${currentVersion}`;
+                closeModal('version-modal');
+                loadChapter();
+            };
+        });
+
+        // Settings listeners
+        const darkModeCheckbox = document.getElementById('dark-mode');
+        const bgColorInput = document.getElementById('bg-color');
+        const textColorInput = document.getElementById('text-color');
+        const fontInput = document.getElementById('font-input');
+        const fontSuggestions = document.getElementById('font-suggestions');
+
+        let fontList = [];
+        let currentFontLink = null;
+
+        fetch('https://www.googleapis.com/webfonts/v1/webfonts')
+            .then(response => response.json())
+            .then(data => {
+                fontList = data.items.map(item => item.family).sort((a, b) => a.localeCompare(b));
+            })
+            .catch(error => console.error('Error fetching fonts:', error));
+
+        darkModeCheckbox.addEventListener('change', () => {
+            if (darkModeCheckbox.checked) {
+                bgColorInput.value = '#1e1e1e';
+                textColorInput.value = '#ffffff';
+            } else {
+                bgColorInput.value = '#f6f5f4';
+                textColorInput.value = '#2e3436';
+            }
+            bgColorInput.dispatchEvent(new Event('input'));
+            textColorInput.dispatchEvent(new Event('input'));
+        });
+
+        bgColorInput.addEventListener('input', updateCustomStyles);
+        textColorInput.addEventListener('input', updateCustomStyles);
+
+        fontInput.addEventListener('input', () => {
+            const query = fontInput.value.trim().toLowerCase();
+            fontSuggestions.innerHTML = '';
+            if (query) {
+                const matches = fontList.filter(font => font.toLowerCase().startsWith(query)).slice(0, 20);
+                matches.forEach(font => {
+                    const li = document.createElement('li');
+                    li.textContent = font;
+                    li.onclick = () => {
+                        fontInput.value = font;
+                        fontSuggestions.innerHTML = '';
+                        applyFont(font);
+                    };
+                    fontSuggestions.appendChild(li);
+                });
+            }
+        });
+
+        function applyFont(font) {
+            if (font && fontList.includes(font)) {
+                if (currentFontLink) {
+                    document.head.removeChild(currentFontLink);
+                }
+                currentFontLink = document.createElement('link');
+                currentFontLink.href = `https://fonts.googleapis.com/css2?family=${font.replace(/ /g, '+')}&display=swap`;
+                currentFontLink.rel = 'stylesheet';
+                document.head.appendChild(currentFontLink);
+                document.body.style.fontFamily = `${font}, sans-serif`;
+            } else {
+                document.body.style.fontFamily = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif`;
+                if (currentFontLink) {
+                    document.head.removeChild(currentFontLink);
+                    currentFontLink = null;
+                }
+            }
+        }
+
+        fontInput.addEventListener('change', () => {
+            const font = fontInput.value.trim();
+            applyFont(font);
+        });
+
+        function shadeColor(color, percent) {
+            let R = parseInt(color.substring(1, 3), 16);
+            let G = parseInt(color.substring(3, 5), 16);
+            let B = parseInt(color.substring(5, 7), 16);
+            R = parseInt(R * (100 + percent) / 100);
+            G = parseInt(G * (100 + percent) / 100);
+            B = parseInt(B * (100 + percent) / 100);
+            R = (R < 255) ? R : 255;
+            G = (G < 255) ? G : 255;
+            B = (B < 255) ? B : 255;
+            R = (R > 0) ? R : 0;
+            G = (G > 0) ? G : 0;
+            B = (B > 0) ? B : 0;
+            const RR = ((R.toString(16).length === 1) ? '0' + R.toString(16) : R.toString(16));
+            const GG = ((G.toString(16).length === 1) ? '0' + G.toString(16) : G.toString(16));
+            const BB = ((B.toString(16).length === 1) ? '0' + B.toString(16) : B.toString(16));
+            return '#' + RR + GG + BB;
+        }
+
+        function isDark(color) {
+            const r = parseInt(color.substring(1, 3), 16);
+            const g = parseInt(color.substring(3, 5), 16);
+            const b = parseInt(color.substring(5, 7), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            return brightness < 128;
+        }
+
+        function updateCustomStyles() {
+            const bg = bgColorInput.value;
+            const text = textColorInput.value;
+            const root = document.documentElement;
+
+            root.style.setProperty('--bg-color', bg);
+            root.style.setProperty('--text-color', text);
+
+            // Body elements
+            root.style.setProperty('--button-bg', bg);
+            root.style.setProperty('--button-text', text);
+            const borderPercent = isDark(text) ? 40 : -40;
+            root.style.setProperty('--button-border', shadeColor(text, borderPercent));
+            const hoverPercent = isDark(bg) ? 20 : -20;
+            root.style.setProperty('--button-hover', shadeColor(bg, hoverPercent));
+            root.style.setProperty('--book-hover', shadeColor(bg, hoverPercent));
+            const supPercent = isDark(text) ? 40 : -40;
+            root.style.setProperty('--sup-color', shadeColor(text, supPercent));
+
+            // Modals based on bg darkness
+            if (isDark(bg)) {
+                root.style.setProperty('--modal-bg', '#1e1e1e');
+                root.style.setProperty('--modal-text', '#ffffff');
+                root.style.setProperty('--modal-border', '#444444');
+                root.style.setProperty('--close-color', '#aaaaaa');
+                root.style.setProperty('--close-hover', '#ffffff');
+                root.style.setProperty('--modal-button-bg', '#2e2e2e');
+                root.style.setProperty('--modal-button-text', '#ffffff');
+                root.style.setProperty('--modal-button-border', '#444444');
+                root.style.setProperty('--modal-button-hover', '#3e3e3e');
+                root.style.setProperty('--modal-book-hover', '#3e3e3e');
+            } else {
+                root.style.setProperty('--modal-bg', '#fefefe');
+                root.style.setProperty('--modal-text', '#000000');
+                root.style.setProperty('--modal-border', '#888888');
+                root.style.setProperty('--close-color', '#aaaaaa');
+                root.style.setProperty('--close-hover', '#000000');
+                root.style.setProperty('--modal-button-bg', '#ffffff');
+                root.style.setProperty('--modal-button-text', '#2e3436');
+                root.style.setProperty('--modal-button-border', '#d3d7cf');
+                root.style.setProperty('--modal-button-hover', '#e4e4e4');
+                root.style.setProperty('--modal-book-hover', '#e4e4e4');
+            }
+        }
+
+        // Initial update
+        updateCustomStyles();
+
+        function selectBook(book) {
+            currentBookId = book.id;
+            currentBookName = book.name;
+            document.getElementById('book-btn').textContent = `Book: ${currentBookName}`;
+            closeModal('book-modal');
+            // Open chapter modal
+            populateChapters(book.chapters);
+            openModal('chapter-modal');
+        }
+
+        function populateChapters(numChapters) {
+            const chapterList = document.getElementById('chapter-list');
+            chapterList.innerHTML = '';
+            for (let i = 1; i <= numChapters; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'chapter-button';
+                btn.textContent = i;
+                btn.onclick = () => {
+                    currentChapter = i;
+                    document.getElementById('chapter-span').textContent = `Chapter: ${currentChapter}`;
+                    closeModal('chapter-modal');
+                    loadChapter();
+                };
+                chapterList.appendChild(btn);
+            }
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.getElementsByClassName('modal');
+            for (let modal of modals) {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        }
+
+        async function loadChapter() {
+            const url = `https://bolls.life/get-text/${currentVersion}/${currentBookId}/${currentChapter}/`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const content = document.getElementById('content');
+                content.innerHTML = '';
+                data.forEach(verse => {
+                    let text = verse.text;
+                    if (currentVersion === 'KJV') {
+                        text = text.replace(/<S>\d+<\/S>/g, '');
+                    }
+                    const p = document.createElement('p');
+                    p.className = 'verse';
+                    p.innerHTML = `<sup>${verse.verse}</sup>${text}`;
+                    content.appendChild(p);
+                });
+            } catch (error) {
+                document.getElementById('content').textContent = 'Error loading chapter.';
+            }
+        }
+
+        // Initial load
+        loadChapter();
+    </script>
+</body>
+</html>
