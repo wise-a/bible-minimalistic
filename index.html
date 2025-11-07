@@ -166,6 +166,12 @@
         <button id="version-btn">Version: ESV</button>
         <button id="book-btn">Book: Genesis</button>
         <span id="chapter-span">Chapter: 1</span>
+        <input type="text" id="search-input" placeholder="Search...">
+        <select id="search-scope">
+            <option value="book">Current Book</option>
+            <option value="all">Entire Bible</option>
+        </select>
+        <button id="search-btn">Search</button>
         <button id="settings-btn"></button>
     </header>
     <div id="content">Loading...</div>
@@ -213,6 +219,22 @@
             <label class="settings-option">
                 <input type="checkbox" id="dark-mode"> Dark Mode
             </label>
+    <!-- Search Modal -->
+    <div id="search-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('search-modal')">&times;</span>
+            <h2>Search Results</h2>
+            <div id="search-results"></div>
+        </div>
+    </div>
+    <!-- Search Modal -->
+    <div id="search-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('search-modal')">&times;</span>
+            <h2>Search Results</h2>
+            <div id="search-results"></div>
+        </div>
+    </div>
             <label class="settings-option">
                 Background Color: <input type="color" id="bg-color" value="#f6f5f4">
             </label>
@@ -320,6 +342,7 @@
         document.getElementById('version-btn').onclick = () => openModal('version-modal');
         document.getElementById('book-btn').onclick = () => openModal('book-modal');
         document.getElementById('settings-btn').onclick = () => openModal('settings-modal');
+        document.getElementById('search-btn').onclick = search;
 
         // Version buttons
         document.querySelectorAll('.version-button').forEach(btn => {
@@ -532,6 +555,49 @@
 
         // Initial load
         loadChapter();
+
+        async function search() {
+            const query = document.getElementById('search-input').value;
+            if (!query) return;
+
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = 'Searching...';
+            openModal('search-modal');
+
+            const searchScope = document.getElementById('search-scope').value;
+            const booksToSearch = searchScope === 'book' ? [books.find(b => b.id === currentBookId)] : books;
+
+            let promises = [];
+            booksToSearch.forEach(book => {
+                for (let i = 1; i <= book.chapters; i++) {
+                    const url = `https://bolls.life/get-text/${currentVersion}/${book.id}/${i}/`;
+                    promises.push(fetch(url).then(res => res.json()).then(data => ({bookName: book.name, chapter: i, data})));
+                }
+            });
+
+            const results = [];
+            await Promise.all(promises).then(chapters => {
+                chapters.forEach(chapterData => {
+                    chapterData.data.forEach(verse => {
+                        if (verse.text.toLowerCase().includes(query.toLowerCase())) {
+                            results.push({ bookName: chapterData.bookName, chapter: chapterData.chapter, verse: verse.verse, text: verse.text });
+                        }
+                    });
+                });
+            });
+
+
+            if (results.length > 0) {
+                resultsContainer.innerHTML = '';
+                results.forEach(result => {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<b>${result.bookName} ${result.chapter}:${result.verse}</b> - ${result.text}`;
+                    resultsContainer.appendChild(p);
+                });
+            } else {
+                resultsContainer.innerHTML = 'No results found.';
+            }
+        }
     </script>
 </body>
 </html>
