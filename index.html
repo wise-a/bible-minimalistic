@@ -180,7 +180,7 @@
         <button id="version-btn">Version: ESV</button>
         <button id="book-btn">Book: Genesis</button>
         <button id="chapter-btn">Chapter: 1</button>
-        <input type="text" id="search-input" placeholder="Search (e.g. Gen 1 1)">
+        <input type="text" id="search-input" placeholder="Search (e.g. Ps 1 1-4)">
         <button id="settings-btn"></button>
     </header>
     <div id="content">Loading...</div>
@@ -315,7 +315,7 @@
         let currentBookId = 1;
         let currentBookName = 'Genesis';
         let currentChapter = 1;
-        let targetVerse = null; // To store the verse number we want to highlight
+        let targetVerses = []; // Updated to array
 
         // Populate book lists
         const otBooks = document.getElementById('ot-books');
@@ -354,22 +354,21 @@
 
         function handleSearch(query) {
             // Regex matches:
-            // 1. Book part (e.g. "Ge", "1 Sa", "John") -> lazy match until digits
+            // 1. Book part (e.g. "Ge", "1 Sa", "John")
             // 2. Chapter number
-            // 3. Optional Verse number (separated by space or colon)
-            const match = query.match(/^(.+?)\s+(\d+)(?:[\s:](\d+))?$/);
+            // 3. Optional Verse spec string (e.g. "1-4" or "1,5,9" or "1-4, 9")
+            const match = query.match(/^(.+?)\s+(\d+)(?:[\s:](.*))?$/);
 
             if (!match) {
-                alert("Invalid format. Try 'Gen 1 1' or 'John 3:16'");
+                alert("Invalid format. Try 'Gen 1 1-3' or 'Ps 1 5,9'");
                 return;
             }
 
             const bookStr = match[1].toLowerCase().trim();
             const chapter = parseInt(match[2]);
-            const verse = match[3] ? parseInt(match[3]) : null;
+            const verseSpec = match[3] ? match[3].trim() : null;
 
-            // Find book by matching start of name
-            // We check normal name "Genesis" and name without spaces "1Samuel" vs "1samuel"
+            // Find book
             const book = books.find(b => 
                 b.name.toLowerCase().startsWith(bookStr) || 
                 b.name.toLowerCase().replace(/\s/g, '').startsWith(bookStr.replace(/\s/g, ''))
@@ -379,10 +378,34 @@
                 currentBookId = book.id;
                 currentBookName = book.name;
                 
-                // Validate chapter
                 if (chapter > 0 && chapter <= book.chapters) {
                     currentChapter = chapter;
-                    targetVerse = verse; // Set highlight target
+                    targetVerses = [];
+
+                    // Parse Verse Spec
+                    if (verseSpec) {
+                        const parts = verseSpec.split(',');
+                        parts.forEach(part => {
+                            part = part.trim();
+                            if (part.includes('-')) {
+                                // Range like 1-4
+                                const range = part.split('-');
+                                const start = parseInt(range[0]);
+                                const end = parseInt(range[1]);
+                                if (!isNaN(start) && !isNaN(end) && end >= start) {
+                                    for (let i = start; i <= end; i++) {
+                                        targetVerses.push(i);
+                                    }
+                                }
+                            } else {
+                                // Single number like 7
+                                const num = parseInt(part);
+                                if (!isNaN(num)) {
+                                    targetVerses.push(num);
+                                }
+                            }
+                        });
+                    }
 
                     // Update UI
                     document.getElementById('book-btn').textContent = `Book: ${currentBookName}`;
@@ -599,10 +622,6 @@
                 const content = document.getElementById('content');
                 content.innerHTML = '';
                 
-                // Clear any previous highlighting request if we changed chapters manually
-                // (Optional: usually if you change chapter manually you don't want old highlight)
-                // But if we came from search, targetVerse is set.
-
                 data.forEach(verse => {
                     let text = verse.text;
                     if (currentVersion === 'KJV') {
@@ -612,18 +631,22 @@
                     p.className = 'verse';
                     p.id = `v${verse.verse}`; // Assign ID for anchor
                     p.innerHTML = `<sup>${verse.verse}</sup>${text}`;
+                    
+                    // Highlight logic
+                    if (targetVerses.includes(verse.verse)) {
+                        p.classList.add('highlight');
+                    }
+
                     content.appendChild(p);
                 });
 
-                // Handle Highlighting
-                if (targetVerse) {
-                    const verseElem = document.getElementById(`v${targetVerse}`);
-                    if (verseElem) {
-                        verseElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        verseElem.classList.add('highlight');
+                // Scroll to first highlighted verse
+                if (targetVerses.length > 0) {
+                    const firstHighlight = document.getElementById(`v${targetVerses[0]}`);
+                    if (firstHighlight) {
+                        firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                    // Reset target so it doesn't persist if we just change versions later
-                    targetVerse = null;
+                    targetVerses = []; // Reset after use
                 }
 
             } catch (error) {
