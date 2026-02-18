@@ -25,6 +25,8 @@
             --modal-button-border: #d3d7cf;
             --modal-button-hover: #e4e4e4;
             --modal-book-hover: #e4e4e4;
+            --highlight-bg: #fff3cd; /* Light mode highlight */
+            --highlight-text: #000000;
         }
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -39,16 +41,21 @@
             gap: 10px;
             margin-bottom: 20px;
             position: relative;
+            flex-wrap: wrap; /* Allows wrapping on small screens */
         }
-        button {
+        button, input[type="text"] {
             background-color: var(--button-bg);
             border: 1px solid var(--button-border);
             border-radius: 8px;
             padding: 8px 16px;
             cursor: pointer;
             font-size: 1em;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, border-color 0.2s;
             color: var(--button-text);
+        }
+        input[type="text"] {
+            cursor: text;
+            width: 200px;
         }
         button:hover {
             background-color: var(--button-hover);
@@ -60,6 +67,13 @@
         }
         .verse {
             margin-bottom: 10px;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.5s ease;
+        }
+        .verse.highlight {
+            background-color: var(--highlight-bg);
+            color: var(--highlight-text);
         }
         .verse sup {
             font-size: 0.8em;
@@ -165,7 +179,8 @@
     <header>
         <button id="version-btn">Version: ESV</button>
         <button id="book-btn">Book: Genesis</button>
-        <span id="chapter-span">Chapter: 1</span>
+        <button id="chapter-btn">Chapter: 1</button>
+        <input type="text" id="search-input" placeholder="Search (e.g. Gen 1 1)">
         <button id="settings-btn"></button>
     </header>
     <div id="content">Loading...</div>
@@ -300,6 +315,7 @@
         let currentBookId = 1;
         let currentBookName = 'Genesis';
         let currentChapter = 1;
+        let targetVerse = null; // To store the verse number we want to highlight
 
         // Populate book lists
         const otBooks = document.getElementById('ot-books');
@@ -319,7 +335,68 @@
         // Event listeners
         document.getElementById('version-btn').onclick = () => openModal('version-modal');
         document.getElementById('book-btn').onclick = () => openModal('book-modal');
+        document.getElementById('chapter-btn').onclick = () => {
+             const book = books.find(b => b.id === currentBookId);
+             if(book) {
+                 populateChapters(book.chapters);
+                 openModal('chapter-modal');
+             }
+        };
         document.getElementById('settings-btn').onclick = () => openModal('settings-modal');
+
+        // Search Listener
+        const searchInput = document.getElementById('search-input');
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch(searchInput.value);
+            }
+        });
+
+        function handleSearch(query) {
+            // Regex matches:
+            // 1. Book part (e.g. "Ge", "1 Sa", "John") -> lazy match until digits
+            // 2. Chapter number
+            // 3. Optional Verse number (separated by space or colon)
+            const match = query.match(/^(.+?)\s+(\d+)(?:[\s:](\d+))?$/);
+
+            if (!match) {
+                alert("Invalid format. Try 'Gen 1 1' or 'John 3:16'");
+                return;
+            }
+
+            const bookStr = match[1].toLowerCase().trim();
+            const chapter = parseInt(match[2]);
+            const verse = match[3] ? parseInt(match[3]) : null;
+
+            // Find book by matching start of name
+            // We check normal name "Genesis" and name without spaces "1Samuel" vs "1samuel"
+            const book = books.find(b => 
+                b.name.toLowerCase().startsWith(bookStr) || 
+                b.name.toLowerCase().replace(/\s/g, '').startsWith(bookStr.replace(/\s/g, ''))
+            );
+
+            if (book) {
+                currentBookId = book.id;
+                currentBookName = book.name;
+                
+                // Validate chapter
+                if (chapter > 0 && chapter <= book.chapters) {
+                    currentChapter = chapter;
+                    targetVerse = verse; // Set highlight target
+
+                    // Update UI
+                    document.getElementById('book-btn').textContent = `Book: ${currentBookName}`;
+                    document.getElementById('chapter-btn').textContent = `Chapter: ${currentChapter}`;
+                    
+                    loadChapter();
+                } else {
+                    alert(`Chapter ${chapter} does not exist in ${book.name}.`);
+                }
+            } else {
+                alert("Book not found. Please check spelling.");
+            }
+        }
+
 
         // Version buttons
         document.querySelectorAll('.version-button').forEach(btn => {
@@ -446,6 +523,9 @@
                 root.style.setProperty('--modal-button-border', '#444444');
                 root.style.setProperty('--modal-button-hover', '#3e3e3e');
                 root.style.setProperty('--modal-book-hover', '#3e3e3e');
+                // Dark mode Highlight
+                root.style.setProperty('--highlight-bg', '#665c26'); 
+                root.style.setProperty('--highlight-text', '#ffffff');
             } else {
                 root.style.setProperty('--modal-bg', '#fefefe');
                 root.style.setProperty('--modal-text', '#000000');
@@ -457,6 +537,9 @@
                 root.style.setProperty('--modal-button-border', '#d3d7cf');
                 root.style.setProperty('--modal-button-hover', '#e4e4e4');
                 root.style.setProperty('--modal-book-hover', '#e4e4e4');
+                // Light mode Highlight
+                root.style.setProperty('--highlight-bg', '#fff3cd');
+                root.style.setProperty('--highlight-text', '#000000');
             }
         }
 
@@ -482,7 +565,7 @@
                 btn.textContent = i;
                 btn.onclick = () => {
                     currentChapter = i;
-                    document.getElementById('chapter-span').textContent = `Chapter: ${currentChapter}`;
+                    document.getElementById('chapter-btn').textContent = `Chapter: ${currentChapter}`;
                     closeModal('chapter-modal');
                     loadChapter();
                 };
@@ -515,6 +598,11 @@
                 const data = await response.json();
                 const content = document.getElementById('content');
                 content.innerHTML = '';
+                
+                // Clear any previous highlighting request if we changed chapters manually
+                // (Optional: usually if you change chapter manually you don't want old highlight)
+                // But if we came from search, targetVerse is set.
+
                 data.forEach(verse => {
                     let text = verse.text;
                     if (currentVersion === 'KJV') {
@@ -522,9 +610,22 @@
                     }
                     const p = document.createElement('p');
                     p.className = 'verse';
+                    p.id = `v${verse.verse}`; // Assign ID for anchor
                     p.innerHTML = `<sup>${verse.verse}</sup>${text}`;
                     content.appendChild(p);
                 });
+
+                // Handle Highlighting
+                if (targetVerse) {
+                    const verseElem = document.getElementById(`v${targetVerse}`);
+                    if (verseElem) {
+                        verseElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        verseElem.classList.add('highlight');
+                    }
+                    // Reset target so it doesn't persist if we just change versions later
+                    targetVerse = null;
+                }
+
             } catch (error) {
                 document.getElementById('content').textContent = 'Error loading chapter.';
             }
